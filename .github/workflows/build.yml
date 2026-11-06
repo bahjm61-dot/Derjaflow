@@ -1,0 +1,316 @@
+name: Build Derja Flow APK
+
+on:
+  push:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Generate Android Project Files
+      run: |
+        mkdir -p app/src/main/java/com/derjaflow/app
+        mkdir -p app/src/main/res/values
+
+        # 1. settings.gradle
+        cat << 'EOF' > settings.gradle
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "DerjaFlow"
+        include ':app'
+        EOF
+
+        # 2. root build.gradle
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                classpath 'com.android.tools.build:gradle:8.2.2'
+                classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
+            }
+        }
+        EOF
+
+        # 3. app/build.gradle
+        cat << 'EOF' > app/build.gradle
+        plugins {
+            id 'com.android.application'
+            id 'org.jetbrains.kotlin.android'
+        }
+
+        android {
+            namespace 'com.derjaflow.app'
+            compileSdk 34
+
+            defaultConfig {
+                applicationId "com.derjaflow.app"
+                minSdk 26
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+
+            buildTypes {
+                release {
+                    minifyEnabled false
+                }
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+            kotlinOptions {
+                jvmTarget = '17'
+            }
+            buildFeatures {
+                compose true
+            }
+            composeOptions {
+                kotlinCompilerExtensionVersion '1.5.8'
+            }
+        }
+
+        dependencies {
+            implementation 'androidx.core:core-ktx:1.12.0'
+            implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+            implementation 'androidx.activity:activity-compose:1.8.2'
+            implementation platform('androidx.compose:compose-bom:2024.02.00')
+            implementation 'androidx.compose.ui:ui'
+            implementation 'androidx.compose.ui:ui-graphics'
+            implementation 'androidx.compose.material3:material3'
+            implementation 'androidx.compose.material:material-icons-extended'
+        }
+        EOF
+
+        # 4. AndroidManifest.xml
+        cat << 'EOF' > app/src/main/AndroidManifest.xml
+        <?xml version="1.0" encoding="utf-8"?>
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.RECORD_AUDIO" />
+            <application
+                android:label="DERJA FLOW"
+                android:theme="@android:style/Theme.Material.NoActionBar">
+                <activity
+                    android:name=".MainActivity"
+                    android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+            </application>
+        </manifest>
+        EOF
+
+        # 5. MainActivity.kt (Full Derja Flow Game Engine)
+        cat << 'EOF' > app/src/main/java/com/derjaflow/app/MainActivity.kt
+        package com.derjaflow.app
+
+        import android.Manifest
+        import android.content.pm.PackageManager
+        import android.media.*
+        import android.os.Bundle
+        import androidx.activity.ComponentActivity
+        import androidx.activity.compose.rememberLauncherForActivityResult
+        import androidx.activity.compose.setContent
+        import androidx.activity.result.contract.ActivityResultContracts
+        import androidx.compose.foundation.background
+        import androidx.compose.foundation.border
+        import androidx.compose.foundation.layout.*
+        import androidx.compose.foundation.lazy.LazyColumn
+        import androidx.compose.foundation.lazy.LazyRow
+        import androidx.compose.foundation.lazy.items
+        import androidx.compose.foundation.shape.RoundedCornerShape
+        import androidx.compose.material.icons.Icons
+        import androidx.compose.material.icons.filled.*
+        import androidx.compose.material3.*
+        import androidx.compose.runtime.*
+        import androidx.compose.ui.Alignment
+        import androidx.compose.ui.Modifier
+        import androidx.compose.ui.graphics.Color
+        import androidx.compose.ui.platform.LocalContext
+        import androidx.compose.ui.unit.dp
+        import androidx.compose.ui.unit.sp
+        import androidx.core.content.ContextCompat
+        import kotlinx.coroutines.*
+        import kotlin.math.sin
+
+        val FlowBlack = Color(0xFF09070F)
+        val FlowDarkSurface = Color(0xFF130E24)
+        val NeonGreen = Color(0xFF00FF88)
+        val ElectricPurple = Color(0xFF9D4EDD)
+
+        class MainActivity : ComponentActivity() {
+            override fun onCreate(savedInstanceState: Bundle?) {
+                super.onCreate(savedInstanceState)
+                setContent {
+                    DerjaFlowAppUI()
+                }
+            }
+        }
+
+        @Composable
+        fun DerjaFlowAppUI() {
+            var currentScreen by remember { mutableStateOf("home") }
+            var xp by remember { mutableIntStateOf(250) }
+            val words = listOf("حومة (Houma)", "شبيبة (Chabiba)", "كرّابة (Karraba)", "مكتوب (Maktoub)", "فنان (Fannene)", "غدرة (Ghadra)")
+            var selectedWords by remember { mutableStateOf(words.shuffled().take(3)) }
+
+            Surface(modifier = Modifier.fillMaxSize(), color = FlowBlack) {
+                when (currentScreen) {
+                    "home" -> HomeScreen(
+                        xp = xp,
+                        onStart = {
+                            selectedWords = words.shuffled().take(3)
+                            currentScreen = "studio"
+                        }
+                    )
+                    "studio" -> FreestyleBooth(
+                        words = selectedWords,
+                        onFinish = {
+                            xp += 150
+                            currentScreen = "home"
+                        }
+                    )
+                }
+            }
+        }
+
+        @Composable
+        fun HomeScreen(xp: Int, onStart: () -> Unit) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Spacer(modifier = Modifier.height(40.dp))
+                    Text("DERJA FLOW", fontSize = 36.sp, color = NeonGreen)
+                    Text("FREESTYLE CYPHER TUNISIA", fontSize = 14.sp, color = ElectricPurple)
+                    Spacer(modifier = Modifier.height(30.dp))
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = FlowDarkSurface),
+                        modifier = Modifier.fillMaxWidth().border(1.dp, ElectricPurple, RoundedCornerShape(16.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text("MC STATUS", color = Color.Gray, fontSize = 12.sp)
+                            Text("LEVEL ${(xp / 200) + 1} RAPPER", color = Color.White, fontSize = 22.sp)
+                            Text("$xp Total XP", color = NeonGreen, fontSize = 14.sp)
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onStart,
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonGreen),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("إبدأ الفريستايل 🔥 START", color = FlowBlack, fontSize = 18.sp)
+                }
+            }
+        }
+
+        @Composable
+        fun FreestyleBooth(words: List<String>, onFinish: () -> Unit) {
+            var timeLeft by remember { mutableIntStateOf(45) }
+            var isRecording by remember { mutableStateOf(false) }
+
+            LaunchedEffect(isRecording) {
+                if (isRecording) {
+                    while (timeLeft > 0) {
+                        delay(1000)
+                        timeLeft--
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("RECORDING BOOTH", color = Color.White, fontSize = 20.sp)
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("الكلمات المطلوبة في القافية:", color = Color.Gray)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(words) { word ->
+                            Box(
+                                modifier = Modifier
+                                    .background(FlowDarkSurface, RoundedCornerShape(8.dp))
+                                    .border(1.dp, NeonGreen, RoundedCornerShape(8.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Text(word, color = Color.White, fontSize = 16.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(40.dp))
+                    Text(
+                        text = "00:${if (timeLeft < 10) "0$timeLeft" else timeLeft}",
+                        fontSize = 48.sp,
+                        color = if (timeLeft <= 10) Color.Red else NeonGreen
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        if (!isRecording) {
+                            isRecording = true
+                        } else {
+                            onFinish()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (!isRecording) NeonGreen else Color.Red
+                    )
+                ) {
+                    Text(if (!isRecording) "سجّل وطّيح الفلو 🎤" else "أنهي واحسب الـ XP ⚡", color = Color.White)
+                }
+            }
+        }
+        EOF
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+
+    - name: Build APK with Gradle
+      run: gradle assembleDebug --stacktrace
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: DERJA-FLOW-APP
+        path: app/build/outputs/apk/debug/app-debug.apk
